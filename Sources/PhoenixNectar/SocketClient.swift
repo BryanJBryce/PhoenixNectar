@@ -361,9 +361,17 @@ public actor Socket {
     _ topic: String,
     policy: RequestPolicy = .default
   ) async throws -> Channel {
+    try await joinChannelWithReply(topic, policy: policy).channel
+  }
+
+  /// Joins a topic and returns both the channel handle and the join reply.
+  public func joinChannelWithReply(
+    _ topic: String,
+    policy: RequestPolicy = .default
+  ) async throws -> (channel: Channel, reply: PhoenixReply) {
     let handle = Channel(topic: Topic(topic), params: [:], client: self)
-    _ = try await handle.join(policy: policy)
-    return handle
+    let reply = try await handle.join(policy: policy)
+    return (handle, reply)
   }
 
   /// Joins a descriptor and returns the resulting channel handle.
@@ -380,11 +388,20 @@ public actor Socket {
     params: T,
     policy: RequestPolicy = .default
   ) async throws -> Channel {
+    try await joinChannelWithReply(topic, params: params, policy: policy).channel
+  }
+
+  /// Joins a topic using an encodable params object and returns both the channel handle and join reply.
+  public func joinChannelWithReply<T: Encodable>(
+    _ topic: String,
+    params: T,
+    policy: RequestPolicy = .default
+  ) async throws -> (channel: Channel, reply: PhoenixReply) {
     let payloadValue = try PhoenixValue.fromEncodable(params)
     guard case .object(let object) = payloadValue else {
       throw PhoenixError.encodingFailure("Encoded join payload is not a JSON object")
     }
-    return try await joinChannel(Topic(topic), payload: object, policy: policy)
+    return try await joinChannelWithReply(Topic(topic), payload: object, policy: policy)
   }
 
   public func joinChannel(
@@ -392,6 +409,13 @@ public actor Socket {
     policy: RequestPolicy = .default
   ) async throws -> Channel {
     try await joinChannel(topic.rawValue, policy: policy)
+  }
+
+  public func joinChannelWithReply(
+    _ topic: Topic,
+    policy: RequestPolicy = .default
+  ) async throws -> (channel: Channel, reply: PhoenixReply) {
+    try await joinChannelWithReply(topic.rawValue, policy: policy)
   }
 
   public func joinChannel<T: Encodable>(
@@ -402,14 +426,30 @@ public actor Socket {
     try await joinChannel(topic.rawValue, params: params, policy: policy)
   }
 
+  public func joinChannelWithReply<T: Encodable>(
+    _ topic: Topic,
+    params: T,
+    policy: RequestPolicy = .default
+  ) async throws -> (channel: Channel, reply: PhoenixReply) {
+    try await joinChannelWithReply(topic.rawValue, params: params, policy: policy)
+  }
+
   private func joinChannel(
     _ topic: Topic,
     payload: Payload,
     policy: RequestPolicy = .default
   ) async throws -> Channel {
+    try await joinChannelWithReply(topic, payload: payload, policy: policy).channel
+  }
+
+  private func joinChannelWithReply(
+    _ topic: Topic,
+    payload: Payload,
+    policy: RequestPolicy = .default
+  ) async throws -> (channel: Channel, reply: PhoenixReply) {
     let handle = Channel(topic: topic, params: payload, client: self)
-    _ = try await handle.join(policy: policy)
-    return handle
+    let reply = try await handle.join(policy: policy)
+    return (handle, reply)
   }
 
   func messages(

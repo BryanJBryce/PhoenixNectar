@@ -770,6 +770,40 @@ struct ClientActorTests {
   }
 
   @Test
+  func joinChannelWithReplyReturnsJoinResponse() async throws {
+    struct JoinResponse: Decodable, Sendable {
+      let accepted: Bool
+    }
+
+    let transport = TestTransport()
+    let client = try Socket(endpoint: "ws://localhost:4000/socket", transportFactory: { _ in transport })
+    try await client.connect()
+    await transport.simulateOpen()
+
+    let frameStream = await transport.sentFrameStream()
+    let joinTask = Task {
+      try await client.joinChannelWithReply("room:lobby")
+    }
+
+    let joinFrame = try await awaitFrame(frameStream)
+    #expect(joinFrame.topic == "room:lobby")
+    #expect(joinFrame.event == PhoenixSystemEvent.join.rawValue)
+
+    await transport.simulateMessage(
+      joinRef: joinFrame.joinRef,
+      ref: joinFrame.ref,
+      topic: "room:lobby",
+      event: PhoenixSystemEvent.reply.rawValue,
+      payload: ["status": "ok", "response": ["accepted": true]]
+    )
+
+    let result = try await joinTask.value
+    #expect(result.channel.topic.rawValue == "room:lobby")
+    #expect(try result.reply.decode(JoinResponse.self).accepted == true)
+    await client.disconnect()
+  }
+
+  @Test
   func channelEventsAndSubscribeAreTyped() async throws {
     struct NewMessage: Codable, Sendable { let body: String }
 
